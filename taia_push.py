@@ -79,7 +79,7 @@ def find_today_report(mail):
             charset = msg.get_content_charset() or 'utf-8'
             body = payload.decode(charset, errors='replace')
     url = None
-        for pattern in [r'(https://www\.coze\.cn/s/[A-Za-z0-9_-]+/?[A-Za-z0-9_-]*)', r'(https://www\.coze\.cn/[^\s<>"\']+)']:
+    for pattern in [r'(https://www\.coze\.cn/s/[^\s<>"\']+)', r'(https://www\.coze\.cn/[^\s<>"\']+)']:
         match = re.search(pattern, body)
         if match:
             url = match.group(1).rstrip('.\'" \n\r')
