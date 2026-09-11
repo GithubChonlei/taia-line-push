@@ -2,7 +2,6 @@
 """
 TAIA LINE Push - GitHub Actions Version
 """
-
 import os
 import sys
 import json
@@ -78,16 +77,21 @@ def find_today_report(mail):
         if payload:
             charset = msg.get_content_charset() or 'utf-8'
             body = payload.decode(charset, errors='replace')
+
     url = None
-    for pattern in [r'(https://www\.coze\.cn/s/[^\s<>"\']+)', r'(https://www\.coze\.cn/[^\s<>"\']+)']:
+    for pattern in [r'(https://www\.coze\.cn/s/[^\s<>"\']+)',
+                    r'(https://www\.coze\.cn/[^\s<>"\']+)']:
         match = re.search(pattern, body)
         if match:
             url = match.group(1).rstrip('.\'" \n\r')
             break
+
     summary = None
-    summary_match = re.search(r'\[TAIA-SUMMARY\]\s*\n(.*?)(?:\n\[TAIA-URL\]|\n---|\nhttp)', body, re.DOTALL)
+    summary_match = re.search(r'\[TAIA-SUMMARY\]\s*\n(.*?)(?:\n\[TAIA-URL\]|\n---|\nhttp)',
+                              body, re.DOTALL)
     if summary_match:
         summary = summary_match.group(1).strip()
+
     logger.info(f"URL found: {url is not None}")
     logger.info(f"Summary found: {summary is not None}")
     return url, summary
@@ -110,10 +114,91 @@ def push_to_line(text):
             chunks.append(remaining[:idx])
             remaining = remaining[idx:]
         for i, chunk in enumerate(chunks):
-            resp = requests.post(WORKER_URL, headers={"Content-Type": "application/json"}, json={"message": chunk}, timeout=30)
+            resp = requests.post(
+                WORKER_URL,
+                headers={"Content-Type": "application/json"},
+                json={"message": chunk},
+                timeout=30,
+            )
             if resp.status_code == 200:
                 logger.info(f"LINE push chunk {i+1}/{len(chunks)} OK")
             else:
-                logger.error(f"Worker chunk {i+1} returned {resp.status_code}: {resp.text}")
+                logger.error(
+                    f"Worker chunk {i+1} returned {resp.status_code}: {resp.text}"
+                )
                 return False
-        return
+        return True
+    except Exception as e:
+        logger.error(f"Worker push failed: {e}")
+        return False
+
+
+def build_line_message(today, summary, url):
+    days_th = [
+        'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์', 'อาทิตย์'
+    ]
+    months_th = [
+        'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+        'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+    ]
+    try:
+        dt = datetime.strptime(today, '%Y-%m-%d')
+        day_th = days_th[dt.weekday()]
+        month_th = months_th[dt.month - 1]
+        year_th = dt.year + 543
+        date_th = f"วัน{day_th}ที่ {dt.day} {month_th} {year_th}"
+    except Exception:
+        date_th = today
+
+    lines = []
+    lines.append("🌴 TAIA รายงานประจำวัน")
+    lines.append(f" {date_th}")
+    lines.append("")
+    if summary:
+        lines.append(summary)
+        lines.append("")
+    if url:
+        lines.append("📖 อ่านฉบับเต็ม:")
+        lines.append(url)
+        lines.append("")
+    lines.append("🤖 โดย TAIA v8.2 (via GitHub Actions)")
+    return '\n'.join(lines)
+
+
+def main():
+    logger.info("=" * 60)
+    logger.info(" TAIA LINE Push (GitHub Actions)")
+    logger.info(f"📅 Date (TH): {get_today_str()}")
+    logger.info("=" * 60)
+
+    if not GMAIL_APP_PASS:
+        logger.error("GMAIL_APP_PASS not set!")
+        sys.exit(1)
+
+    try:
+        mail = connect_gmail()
+    except Exception as e:
+        logger.error(f"Gmail connection failed: {e}")
+        push_to_line(f"⚠️ TAIA แจ้งเตือน: ไม่สามารถเชื่อมต่อ Gmail ได้\n{e}")
+        sys.exit(1)
+
+    url, summary = find_today_report(mail)
+    mail.logout()
+
+    if not url:
+        logger.info("No report URL found. Report may not be ready yet.")
+        sys.exit(0)
+
+    today = get_today_str()
+    message = build_line_message(today, summary, url)
+    ok = push_to_line(message)
+
+    if ok:
+        logger.info("✅ TAIA daily report pushed to LINE successfully")
+    else:
+        logger.error(" Failed to push to LINE")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
