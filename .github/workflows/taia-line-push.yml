@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install requests google-auth google-auth-oauthlib google-api-python-client
       - name: Run TAIA LINE Push
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
