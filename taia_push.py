@@ -4,6 +4,7 @@ import logging
 import imaplib
 import email
 import time
+import re
 from datetime import datetime, timezone, timedelta
 import requests
 
@@ -55,7 +56,7 @@ def send_alert():
     payload = {
         "messages": [{
             "type": "text",
-            "text": f"⚠️ TAIA Alert: ไม่พบรายงานวันที่ {now.strftime('%Y-%m-%d')} ({thai_date})\nเวลาตรวจสอบ: {now.strftime('%H:%M น.')}\nอีเมลอาจยังไม่ถึงหรือมีปัญหา กรุณาตรวจสอบ Gmail"
+            "text": f"️ TAIA Alert: ไม่พบรายงานวันที่ {now.strftime('%Y-%m-%d')} ({thai_date})\nเวลาตรวจสอบ: {now.strftime('%H:%M น.')}\nอีเมลอาจยังไม่ถึงหรือมีปัญหา กรุณาตรวจสอบ Gmail"
         }]
     }
     headers = {"Content-Type": "application/json"}
@@ -79,10 +80,15 @@ def main():
                 html = fetch_email_html(mail, msg_id)
                 mail.logout()
                 if html:
-                    payload = {"messages": [{"type": "text", "text": html, "format": "html"}]}
+                    urls = re.findall(r'https://[^\s"<>\']+', html)
+                    if urls:
+                        msg = f"📋 TAIA Report\n{urls[0]}"
+                    else:
+                        msg = "⚠️ TAIA Report found but no URL extracted"
+                    payload = {"messages": [{"type": "text", "text": msg}]}
                     headers = {"Content-Type": "application/json"}
                     r = requests.post(WORKER_URL, json=payload, headers=headers, timeout=10)
-                    logger.info(f"Sent to LINE: {r.status_code}")
+                    logger.info(f"Sent to LINE: {r.status_code}, URL: {urls[0] if urls else 'none'}")
                     sys.exit(0)
         except Exception as e:
             logger.warning(f"Attempt {attempt}/{MAX_RETRIES} failed: {e}")
