@@ -63,9 +63,11 @@ def send_alert():
 def main():
     logger = create_logger()
     logger.info("TAIA Push Started")
+    
     if not WORKER_URL:
         logger.error("WORKER_URL not configured")
         sys.exit(1)
+    
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             mail = connect_imap()
@@ -77,7 +79,12 @@ def main():
                 if html:
                     urls = re.findall(r'https://[^\s"<>\']+', html)
                     if urls:
-                        payload = {"pdf_url": urls[0], "title": "TAIA Farmer Daily", "subtitle": "รายงานเกษตรรายวัน"}
+                        payload = {
+                            "pdf_url": urls[0],
+                            "html_url": urls[1] if len(urls) > 1 else "",
+                            "title": "TAIA Farmer Daily",
+                            "subtitle": "รายงานเกษตรรายวัน"
+                        }
                         headers = {"Content-Type": "application/json"}
                         r = requests.post(WORKER_URL + "/pdf", json=payload, headers=headers, timeout=10)
                         logger.info(f"Sent to LINE: {r.status_code}, PDF: {urls[0]}")
@@ -88,9 +95,10 @@ def main():
                     logger.warning("No HTML content in email")
         except Exception as e:
             logger.warning(f"Attempt {attempt}/{MAX_RETRIES} failed: {e}")
-        if attempt < MAX_RETRIES:
-            logger.info(f"Retry in {RETRY_DELAY}s...")
-            time.sleep(RETRY_DELAY)
+            if attempt < MAX_RETRIES:
+                logger.info(f"Retry in {RETRY_DELAY}s...")
+                time.sleep(RETRY_DELAY)
+    
     logger.error("Report not found after all retries")
     send_alert()
     logger.info("Alert sent to LINE")
